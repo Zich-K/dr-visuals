@@ -238,6 +238,11 @@ async function checkForUpdate(){
     if(!res.ok) return;
     const data = await res.json();
     const latest = data.version || '';
+
+    // 사이드바 버전 표시 업데이트
+    const sbVer = document.getElementById('sb-version');
+    if(sbVer) sbVer.textContent = 'v' + DR_VISUALS_VERSION;
+
     if(!latest || latest === DR_VISUALS_VERSION) return;
 
     // 업데이트 배너 표시
@@ -328,6 +333,11 @@ window.addEventListener('DOMContentLoaded', () => {
     <button class="sb-btn sec" onclick="exportToPptx()" style="margin-top:4px;border-color:rgba(168,136,204,.5);color:#a888cc;">📑 PPT 파일로 내보내기</button>
     <button class="sb-btn sec" onclick="saveCurrentPreset()" style="margin-top:2px;border-color:rgba(168,136,204,.3);color:#a888cc;">★ 현재 설정 프리셋 저장</button>
     <div class="status" id="sb-status"></div>
+    <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.08);text-align:center;">
+      <span style="font-size:10px;color:rgba(255,255,255,.35);font-family:'Malgun Gothic',sans-serif;">
+        Dr.Visuals <span id="sb-version">v1.0.0</span>
+      </span>
+    </div>
   </div>
 </aside>
 
