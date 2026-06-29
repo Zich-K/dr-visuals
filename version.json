@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.0.1",
   "released": "2026-06-29",
   "notes": "Wide format 자동 전치 · 2중헤더 연도비교 · 나비형 차트 · Export 파이프라인 개선",
   "download": "https://github.com/Zich-K/dr-visuals/raw/main/index.html"
