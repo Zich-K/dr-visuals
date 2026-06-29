@@ -260,13 +260,21 @@ function dismissUpdate(){
   if(banner) banner.style.display = 'none';
 }
 
-function downloadUpdate(){
-  const a = document.createElement('a');
-  a.href = DOWNLOAD_URL;
-  a.download = 'Dr_Visuals.html';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+async function downloadUpdate(){
+  try{
+    const res = await fetch('https://zich-k.github.io/dr-visuals/index.html?t='+Date.now());
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Dr_Visuals.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }catch(e){
+    alert('다운로드 실패. https://github.com/Zich-K/dr-visuals 에서 직접 다운로드해주세요.');
+  }
 }
 
 window.addEventListener('DOMContentLoaded', () => {
