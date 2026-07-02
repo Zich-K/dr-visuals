@@ -261,20 +261,7 @@ function dismissUpdate(){
 }
 
 async function downloadUpdate(){
-  try{
-    const res = await fetch('https://zich-k.github.io/dr-visuals/index.html?t='+Date.now());
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'Dr_Visuals.html';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }catch(e){
-    alert('다운로드 실패. https://github.com/Zich-K/dr-visuals 에서 직접 다운로드해주세요.');
-  }
+  window.location.href = 'https://zich-k.github.io/dr-visuals/';
 }
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -295,7 +282,7 @@ window.addEventListener('DOMContentLoaded', () => {
   </div>
   <button onclick="downloadUpdate()" style="background:#fff;color:#1a4a8a;border:none;
     border-radius:5px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;
-    font-family:'Malgun Gothic',sans-serif;">⬇ 지금 업데이트</button>
+    font-family:'Malgun Gothic',sans-serif;">🔄 최신버전으로 이동</button>
   <button onclick="dismissUpdate()" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,0.5);
     border-radius:5px;padding:6px 10px;font-size:12px;cursor:pointer;
     font-family:'Malgun Gothic',sans-serif;">나중에</button>
