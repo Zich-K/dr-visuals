@@ -234,6 +234,9 @@ const DOWNLOAD_URL       = 'https://github.com/Zich-K/dr-visuals/raw/main/index.
 
 async function checkForUpdate(){
   try{
+    // github.io에서 실행 중이면 배너 불필요 (항상 최신)
+    if(window.location.hostname === 'zich-k.github.io') return;
+
     const res  = await fetch(VERSION_CHECK_URL + '?t=' + Date.now(), {cache:'no-store'});
     if(!res.ok) return;
     const data = await res.json();
