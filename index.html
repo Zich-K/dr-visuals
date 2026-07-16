@@ -811,6 +811,7 @@ window.addEventListener('DOMContentLoaded', () => {
         <select id="rule-recommend" class="ctrl-sel">
           <option value="bar">📊 세로 막대형</option>
           <option value="horizontalBar">📉 가로 막대형</option>
+          <option value="stackedBar">📊 누적 막대</option>
           <option value="butterfly">🦋 나비형 막대</option>
           <option value="stackedMix">📊 혼합 누적 막대</option>
           <option value="line">📈 선형 차트</option>
@@ -893,9 +894,10 @@ let selType='bar', chartInst=null, previewInst=null;
 let exportRegions={kpi:true,chart:true,table:true};
 let selSizeId='ppt-std', selDpi=200;
 
-const CHART_LABELS={bar:'세로 막대형',horizontalBar:'가로 막대형',butterfly:'나비형 막대',stackedMix:'혼합 누적 막대',line:'선형 차트',pie:'파이 차트',doughnut:'도넛 차트',scatter:'산점도',radar:'방사형(레이더)'};
+const CHART_LABELS={bar:'세로 막대형',horizontalBar:'가로 막대형',stackedBar:'누적 막대',butterfly:'나비형 막대',stackedMix:'혼합 누적 막대',line:'선형 차트',pie:'파이 차트',doughnut:'도넛 차트',scatter:'산점도',radar:'방사형(레이더)'};
 const CHART_META=[
   {id:'bar',icon:'📊',name:'세로막대',hint:'비교·랭킹'},
+  {id:'stackedBar',icon:'📊',name:'누적막대',hint:'구성·누적'},
   {id:'horizontalBar',icon:'📉',name:'가로막대',hint:'긴 레이블'},
   {id:'butterfly',icon:'🦋',name:'나비형',hint:'양방향 비교'},
   {id:'stackedMix',icon:'📊',name:'혼합누적',hint:'계열별 조건부 합계'},
@@ -1205,11 +1207,14 @@ function showPreview(){
 }
 
 // 컬럼 수치형 판단: 데이터 행의 60% 이상이 숫자이면 수치형
+// Wide 전치 데이터는 None(0) 값이 많아 임계값을 낮춤
 function isNumericCol(colIdx){
   const vals=rawData.slice(0,20).map(r=>r[colIdx]).filter(v=>v!==undefined&&v!=='');
   if(!vals.length) return false;
   const nc=vals.filter(v=>!isNaN(parseFloat(v))&&isFinite(v)).length;
-  return nc/vals.length>=0.6;
+  // Wide 전치된 경우: 임계값 30%로 낮춤 (None→0 변환으로 숫자 비율 낮아질 수 있음)
+  const threshold = window._wideTransposed ? 0.3 : 0.6;
+  return nc/vals.length >= threshold;
 }
 
 function initAxes(){
@@ -1523,17 +1528,17 @@ async function runAnalysis(){
   // yIdxs: 추천 차트에 따라 다중 선택
   let yIdxsRec=[yi];
   if(window._wideTransposed){
-    // Wide 전치된 경우: 수치 컬럼 전체를 Y축으로 (다계열 지원)
+    // Wide 전치된 경우: 수치 컬럼 전체를 Y축으로 (차트 타입 무관)
     yIdxsRec = numList.filter(({i})=>i!==xi).map(({i})=>i);
     if(!yIdxsRec.length) yIdxsRec=[yi];
-  } else if(matched.recommend==='combo'||matched.recommend==='line'){
+  } else if(matched.recommend==='combo'||matched.recommend==='line'||matched.recommend==='bar'||matched.recommend==='horizontalBar'){
     yIdxsRec=numList.filter(({i})=>i!==xi).map(({i})=>i);
     if(!yIdxsRec.length) yIdxsRec=[yi];
   }
 
   // 제목 생성
   const titleBase=headers[yi]||'분석';
-  const titleMap={line:'추세',bar:'비교',horizontalBar:'달성 현황',butterfly:'양방향 비교',stackedMix:'혼합 누적 비교',combo:'복합 분석',doughnut:'구성 비율',radar:'다차원 비교',scatter:'상관 분석'};
+  const titleMap={line:'추세',bar:'비교',horizontalBar:'달성 현황',stackedBar:'누적 비교',butterfly:'양방향 비교',stackedMix:'혼합 누적 비교',combo:'복합 분석',doughnut:'구성 비율',radar:'다차원 비교',scatter:'상관 분석'};
   const autoTitle=titleBase+' '+(titleMap[matched.recommend]||'분석');
 
   // ── 4) 팁 텍스트 구성
@@ -1779,8 +1784,8 @@ function getProcessed(cfg){
 function previewChart(){
   const cfg=getCfg();
 
-  // ── 혼합 누적 막대 분기 ──
-  if(cfg.chartType === 'stackedMix'){
+  // ── 누적 막대 분기 ──
+  if(cfg.chartType === 'stackedBar'){
     document.getElementById('preview-area').style.display='block';
     const canvas=document.getElementById('preview-canvas');
     if(previewInst){previewInst.destroy();previewInst=null;}
@@ -1791,7 +1796,6 @@ function previewChart(){
     const seriesData=yIdxs.map(yi=>rawData.map(r=>parseFloat(r[yi])||0));
     const seriesNames=yIdxs.map(yi=>headers[yi]||('계열'+(yi+1)));
     const totals=lbls.map((_,i)=>seriesData.reduce((s,d)=>s+d[i],0));
-    const showTotal=lbls.map((_,i)=>seriesData.every(d=>d[i]>0));
     const P=curPal;
     const datasets=seriesData.map((data,si)=>({
       label:seriesNames[si],data,backgroundColor:P[si%P.length],
@@ -1808,7 +1812,7 @@ function previewChart(){
         plugins:{
           legend:{display:true,position:'top',labels:{font:{family:'Malgun Gothic,sans-serif',size:11},padding:12,boxWidth:12}},
           tooltip:{callbacks:{label:ctx=>' '+ctx.dataset.label+': '+formatVal(ctx.parsed.y,u)}},
-          datalabels:{anchor:'center',align:'center',color:'#fff',font:{size:9,weight:'bold'},formatter:(v,ctx)=>v>0?formatVal(v,u):null}
+          datalabels:{anchor:'center',align:'center',color:'#fff',font:{size:9,weight:'bold'},formatter:(v)=>v>0?formatVal(v,u):null}
         },
         scales:{
           x:{stacked:true,ticks:{font:{family:'Malgun Gothic,sans-serif',size:10}},grid:{display:false},border:{display:false}},
@@ -1817,15 +1821,88 @@ function previewChart(){
       },
       plugins:[
         ...(typeof ChartDataLabels!=='undefined'?[ChartDataLabels]:[]),
-        {id:'pvTotals',afterDraw(chart){
+        {id:'pvStackedTotals',afterDraw(chart){
           const c2=chart.ctx,area=chart.chartArea;
           lbls.forEach((_,i)=>{
-            if(!showTotal[i]) return;
             const x=chart.getDatasetMeta(0).data[i].x;
             let topY=area.bottom;
             datasets.forEach((_,di)=>{const bar=chart.getDatasetMeta(di).data[i];if(seriesData[di][i]>0&&bar.y<topY)topY=bar.y;});
             c2.save();c2.textAlign='center';c2.font='bold 10px Malgun Gothic,sans-serif';c2.fillStyle='#1e3560';
             c2.fillText(formatVal(totals[i],u),x,topY-7);c2.restore();
+          });
+        }}
+      ]
+    });
+    return;
+  }
+
+  // ── 혼합 누적 막대 분기 ──
+  if(cfg.chartType === 'stackedMix'){
+    document.getElementById('preview-area').style.display='block';
+    const canvas=document.getElementById('preview-canvas');
+    if(previewInst){previewInst.destroy();previewInst=null;}
+    const u=cfg.unit||'raw';
+    const xIdx=cfg.xIdx??0;
+    const yIdxs=cfg.yIdxs||[cfg.yIdx];
+    const {rateIdxs, profitIdxs, stackIdxs} = classifyStackedMixCols(yIdxs);
+    const lbls=rawData.map(r=>String(r[xIdx]??''));
+    const seriesData=stackIdxs.map(yi=>rawData.map(r=>parseFloat(r[yi])||0));
+    const seriesNames=stackIdxs.map(yi=>headers[yi]||('계열'+(yi+1)));
+    const totals=lbls.map((_,i)=>seriesData.reduce((s,d)=>s+d[i],0));
+    const showTotal=lbls.map((_,i)=>seriesData.every(d=>d[i]>0));
+    const profitVals=profitIdxs.length?rawData.map(r=>parseFloat(r[profitIdxs[0]])||0):null;
+    const rateVals=rateIdxs.length?rawData.map(r=>parseFloat(r[rateIdxs[0]])||0):null;
+    const hasBottom=!!(profitVals||rateVals);
+    const P=curPal;
+    const datasets=seriesData.map((data,si)=>({
+      label:seriesNames[si],data,backgroundColor:P[si%P.length],
+      stack:'s',borderWidth:0,
+      borderRadius:si===seriesData.length-1?{topLeft:4,topRight:4}:0,
+      borderSkipped:false,
+    }));
+    previewInst=new Chart(canvas.getContext('2d'),{
+      type:'bar',
+      data:{labels:lbls,datasets},
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        layout:{padding:{top:36,bottom:6}},
+        plugins:{
+          legend:{display:true,position:'top',labels:{font:{family:'Malgun Gothic,sans-serif',size:11},padding:12,boxWidth:12}},
+          tooltip:{callbacks:{
+            label:ctx=>' '+ctx.dataset.label+': '+formatVal(ctx.parsed.y,u),
+            afterBody:items=>{
+              const i=items[0].dataIndex; const out=[];
+              if(profitVals) out.push((headers[profitIdxs[0]]||'이익')+': '+formatVal(profitVals[i],u));
+              if(rateVals)   out.push((headers[rateIdxs[0]]||'율')+': '+(rateVals[i]*100).toFixed(2)+'%');
+              return out;
+            }
+          }},
+          datalabels:{anchor:'center',align:'center',color:'#fff',font:{size:9,weight:'bold'},formatter:(v)=>v>0?formatVal(v,u):null}
+        },
+        scales:{
+          x:{stacked:true,ticks:{font:{family:'Malgun Gothic,sans-serif',size:10},padding:hasBottom?40:4},grid:{display:false},border:{display:false}},
+          y:{stacked:true,ticks:{callback:v=>formatVal(v,u),font:{size:9}},grid:{color:'#eee'},border:{display:false}}
+        }
+      },
+      plugins:[
+        ...(typeof ChartDataLabels!=='undefined'?[ChartDataLabels]:[]),
+        {id:'pvMixLabels',afterDraw(chart){
+          const c2=chart.ctx,area=chart.chartArea;
+          lbls.forEach((_,i)=>{
+            const x=chart.getDatasetMeta(0).data[i].x;
+            c2.save();c2.textAlign='center';
+            if(showTotal[i]){
+              let topY=area.bottom;
+              datasets.forEach((_,di)=>{const bar=chart.getDatasetMeta(di).data[i];if(seriesData[di][i]>0&&bar.y<topY)topY=bar.y;});
+              c2.font='bold 10px Malgun Gothic,sans-serif';c2.fillStyle='#1e3560';
+              c2.fillText(formatVal(totals[i],u),x,topY-7);
+            }
+            if(profitVals||rateVals){
+              const yBase=area.bottom+16;
+              if(profitVals){c2.font='bold 10px Malgun Gothic,sans-serif';c2.fillStyle='#1e3560';c2.fillText(formatVal(profitVals[i],u),x,yBase);}
+              if(rateVals){c2.font='9px Malgun Gothic,sans-serif';c2.fillStyle='#888';c2.fillText((rateVals[i]*100).toFixed(2)+'%',x,yBase+(profitVals?13:0));}
+            }
+            c2.restore();
           });
         }}
       ]
@@ -2350,24 +2427,131 @@ function getButterflyDatasets(cfg){
   return { labels, datasets: ds };
 }
 
-// ── 혼합 누적 막대 차트 (stackedMix) ─────────────────────────────────────────
-// 계열 중 0인 컬럼이 있으면 합계 레이블 생략, 모두 있을 때만 합계 표시
-function buildStackedMixChart(cfg, st, inner){
+// ── 누적 막대 차트 (stackedBar) ──────────────────────────────────────────────
+function buildStackedBarChart(cfg, st, inner){
   const P = curPal;
   const u = cfg.unit || 'raw';
   const yIdxs = cfg.yIdxs || [cfg.yIdx];
   const xIdx  = cfg.xIdx ?? 0;
 
   const labels = rawData.map(r => String(r[xIdx] ?? ''));
-  // 계열별 데이터
   const seriesData = yIdxs.map(yi => rawData.map(r => parseFloat(r[yi]) || 0));
   const seriesNames = yIdxs.map(yi => headers[yi] || ('계열'+(yi+1)));
-  const totals = labels.map((_,i) => seriesData.reduce((s,d)=>s+d[i],0));
+  const totals = labels.map((_,i) => seriesData.reduce((s,d) => s+d[i], 0));
 
-  // 모든 계열이 0보다 큰 컬럼만 합계 표시
+  inner.style.background = st.bg;
+  inner.innerHTML = '';
+  document.getElementById('ppt-canvas').style.background = st.bg;
+
+  const te = document.createElement('div');
+  te.style.cssText = 'font-size:12px;font-weight:700;color:'+st.hdr+';border-left:3px solid '+P[0]+';padding-left:7px;flex-shrink:0;';
+  te.textContent = cfg.title || analysisResult.title || '누적 막대';
+  inner.appendChild(te);
+
+  const cc = document.createElement('div');
+  cc.style.cssText = 'flex:1;background:'+st.card+';border:1px solid '+st.border+';border-radius:5px;padding:9px;display:flex;flex-direction:column;min-height:0;overflow:hidden;margin-top:8px;';
+  inner.appendChild(cc);
+  const cw = document.createElement('div');
+  cw.style.cssText = 'flex:1;min-height:0;position:relative;';
+  cc.appendChild(cw);
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:absolute;inset:0;width:100%!important;height:100%!important;';
+  cw.appendChild(canvas);
+
+  if(chartInst){chartInst.destroy();chartInst=null;}
+
+  const datasets = seriesData.map((data, si) => ({
+    label: seriesNames[si],
+    data,
+    backgroundColor: P[si % P.length],
+    stack: 's',
+    borderWidth: 0,
+    borderRadius: si === seriesData.length-1 ? {topLeft:4,topRight:4} : 0,
+    borderSkipped: false,
+  }));
+
+  chartInst = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive:true, maintainAspectRatio:false, animation:false,
+      layout:{ padding:{ top:36, bottom:10 } },
+      plugins:{
+        legend:{display:true,position:'top',labels:{font:{family:'Malgun Gothic,sans-serif',size:11},padding:12,boxWidth:12}},
+        tooltip:{callbacks:{label:ctx=>' '+ctx.dataset.label+': '+formatVal(ctx.parsed.y,u)}},
+        datalabels:{
+          anchor:'center', align:'center', color:'#fff',
+          font:{size:9,weight:'bold',family:'Malgun Gothic,sans-serif'},
+          formatter:(v,ctx)=>v>0?formatVal(v,u):null
+        }
+      },
+      scales:{
+        x:{stacked:true,ticks:{font:{family:'Malgun Gothic,sans-serif',size:10},color:st.muted},grid:{display:false},border:{display:false}},
+        y:{stacked:true,ticks:{callback:v=>formatVal(v,u),font:{family:'Malgun Gothic,sans-serif',size:9},color:st.muted},grid:{color:'#eee'},border:{display:false}}
+      }
+    },
+    plugins:[
+      ...(typeof ChartDataLabels!=='undefined'?[ChartDataLabels]:[]),
+      {
+        id:'stackedBarTotals',
+        afterDraw(chart){
+          const c2 = chart.ctx;
+          const area = chart.chartArea;
+          labels.forEach((_,i)=>{
+            const x = chart.getDatasetMeta(0).data[i].x;
+            let topY = area.bottom;
+            datasets.forEach((_,di)=>{
+              const bar = chart.getDatasetMeta(di).data[i];
+              if(seriesData[di][i]>0 && bar.y<topY) topY = bar.y;
+            });
+            c2.save();
+            c2.textAlign='center';
+            c2.font='bold 10px Malgun Gothic,sans-serif';
+            c2.fillStyle=st.hdr||'#1e3560';
+            c2.fillText(formatVal(totals[i],u), x, topY-7);
+            c2.restore();
+          });
+        }
+      }
+    ]
+  });
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── 혼합 누적 막대 차트 (stackedMix) ─────────────────────────────────────────
+// Y축 컬럼 자동 분류: 율/%·0~1값 → 하단% / '이익' → 하단값 / 나머지 → 누적
+// 누적 계열이 모두 값 있을 때만 상단 합계 표시 (일부 빈 계열이면 생략)
+function classifyStackedMixCols(yIdxs){
+  const rateIdxs=[], profitIdxs=[], stackIdxs=[];
+  yIdxs.forEach(yi=>{
+    const h=String(headers[yi]||'');
+    const vals=rawData.map(r=>parseFloat(r[yi])).filter(v=>!isNaN(v)&&v!==0);
+    const allFraction = vals.length>0 && vals.every(v=>Math.abs(v)<1);
+    if(/율|%|rate/i.test(h) || allFraction){ rateIdxs.push(yi); }
+    else if(/이익|profit/i.test(h)){ profitIdxs.push(yi); }
+    else { stackIdxs.push(yi); }
+  });
+  if(!stackIdxs.length && profitIdxs.length){ stackIdxs.push(...profitIdxs.splice(0)); }
+  return {rateIdxs, profitIdxs, stackIdxs};
+}
+
+function buildStackedMixChart(cfg, st, inner){
+  const P = curPal;
+  const u = cfg.unit || 'raw';
+  const yIdxs = cfg.yIdxs || [cfg.yIdx];
+  const xIdx  = cfg.xIdx ?? 0;
+
+  const {rateIdxs, profitIdxs, stackIdxs} = classifyStackedMixCols(yIdxs);
+
+  const labels = rawData.map(r => String(r[xIdx] ?? ''));
+  const seriesData  = stackIdxs.map(yi => rawData.map(r => parseFloat(r[yi]) || 0));
+  const seriesNames = stackIdxs.map(yi => headers[yi] || ('계열'+(yi+1)));
+  const totals    = labels.map((_,i) => seriesData.reduce((s,d)=>s+d[i],0));
   const showTotal = labels.map((_,i) => seriesData.every(d => d[i] > 0));
+  const profitVals = profitIdxs.length ? rawData.map(r => parseFloat(r[profitIdxs[0]]) || 0) : null;
+  const rateVals   = rateIdxs.length   ? rawData.map(r => parseFloat(r[rateIdxs[0]]) || 0)   : null;
+  const hasBottom  = !!(profitVals || rateVals);
 
-  // DOM 구성
   inner.style.background = st.bg;
   inner.innerHTML = '';
   document.getElementById('ppt-canvas').style.background = st.bg;
@@ -2404,42 +2588,65 @@ function buildStackedMixChart(cfg, st, inner){
     data: { labels, datasets },
     options: {
       responsive:true, maintainAspectRatio:false, animation:false,
-      layout:{ padding:{ top:40, bottom:10 } },
+      layout:{ padding:{ top:36, bottom:6 } },
       plugins:{
         legend:{display:true,position:'top',labels:{font:{family:'Malgun Gothic,sans-serif',size:11},padding:12,boxWidth:12}},
-        tooltip:{callbacks:{label:ctx=>' '+ctx.dataset.label+': '+formatVal(ctx.parsed.y,u)}},
+        tooltip:{callbacks:{
+          label:ctx=>' '+ctx.dataset.label+': '+formatVal(ctx.parsed.y,u),
+          afterBody:items=>{
+            const i=items[0].dataIndex; const out=[];
+            if(profitVals) out.push((headers[profitIdxs[0]]||'이익')+': '+formatVal(profitVals[i],u));
+            if(rateVals)   out.push((headers[rateIdxs[0]]||'율')+': '+(rateVals[i]*100).toFixed(2)+'%');
+            return out;
+          }
+        }},
         datalabels:{
           anchor:'center', align:'center', color:'#fff',
           font:{size:9,weight:'bold',family:'Malgun Gothic,sans-serif'},
-          formatter:(v,ctx)=>v>0?formatVal(v,u):null
+          formatter:(v)=>v>0?formatVal(v,u):null
         }
       },
       scales:{
-        x:{stacked:true,ticks:{font:{family:'Malgun Gothic,sans-serif',size:10},color:st.muted},grid:{display:false},border:{display:false}},
+        x:{stacked:true,ticks:{font:{family:'Malgun Gothic,sans-serif',size:10},color:st.muted,padding:hasBottom?40:4},grid:{display:false},border:{display:false}},
         y:{stacked:true,ticks:{callback:v=>formatVal(v,u),font:{family:'Malgun Gothic,sans-serif',size:9},color:st.muted},grid:{color:'#eee'},border:{display:false}}
       }
     },
     plugins:[
       ...(typeof ChartDataLabels!=='undefined'?[ChartDataLabels]:[]),
       {
-        id:'stackedMixTotals',
+        id:'stackedMixLabels',
         afterDraw(chart){
           const c2 = chart.ctx;
           const area = chart.chartArea;
           labels.forEach((_,i)=>{
-            if(!showTotal[i]) return; // 빈 계열 있으면 합계 생략
             const x = chart.getDatasetMeta(0).data[i].x;
-            let topY = area.bottom;
-            datasets.forEach((_,di)=>{
-              const bar = chart.getDatasetMeta(di).data[i];
-              const val = seriesData[di][i];
-              if(val>0 && bar.y<topY) topY = bar.y;
-            });
             c2.save();
-            c2.textAlign = 'center';
-            c2.font = 'bold 10px Malgun Gothic,sans-serif';
-            c2.fillStyle = st.hdr || '#1e3560';
-            c2.fillText(formatVal(totals[i],u), x, topY-7);
+            c2.textAlign='center';
+            // 상단 합계: 모든 누적 계열이 값 있을 때만
+            if(showTotal[i]){
+              let topY = area.bottom;
+              datasets.forEach((_,di)=>{
+                const bar = chart.getDatasetMeta(di).data[i];
+                if(seriesData[di][i]>0 && bar.y<topY) topY = bar.y;
+              });
+              c2.font='bold 10px Malgun Gothic,sans-serif';
+              c2.fillStyle=st.hdr||'#1e3560';
+              c2.fillText(formatVal(totals[i],u), x, topY-7);
+            }
+            // 하단 보조지표: 이익값 + 율%
+            if(profitVals || rateVals){
+              const yBase = area.bottom + 16;
+              if(profitVals){
+                c2.font='bold 10px Malgun Gothic,sans-serif';
+                c2.fillStyle=st.hdr||'#1e3560';
+                c2.fillText(formatVal(profitVals[i],u), x, yBase);
+              }
+              if(rateVals){
+                c2.font='9px Malgun Gothic,sans-serif';
+                c2.fillStyle=st.muted||'#888';
+                c2.fillText((rateVals[i]*100).toFixed(2)+'%', x, yBase+(profitVals?13:0));
+              }
+            }
             c2.restore();
           });
         }
@@ -2521,118 +2728,10 @@ function buildChart(){
   const cfg=customCfg||getCfg();
   const st=curStyle, P=curPal;
 
-  // ── 혼합 누적 막대 분기 ──
-  if(cfg.chartType === 'stackedMix'){
-    document.getElementById('preview-area').style.display='block';
-    const canvas=document.getElementById('preview-canvas');
-    if(previewInst){previewInst.destroy();previewInst=null;}
-    const u=cfg.unit||'raw';
-    const xIdx=cfg.xIdx??0;
-    const yIdxs=cfg.yIdxs||[cfg.yIdx];
-    const lbls=rawData.map(r=>String(r[xIdx]??''));
-    const seriesData=yIdxs.map(yi=>rawData.map(r=>parseFloat(r[yi])||0));
-    const seriesNames=yIdxs.map(yi=>headers[yi]||('계열'+(yi+1)));
-    const totals=lbls.map((_,i)=>seriesData.reduce((s,d)=>s+d[i],0));
-    const showTotal=lbls.map((_,i)=>seriesData.every(d=>d[i]>0));
-    const P=curPal;
-    const datasets=seriesData.map((data,si)=>({
-      label:seriesNames[si],data,backgroundColor:P[si%P.length],
-      stack:'s',borderWidth:0,
-      borderRadius:si===seriesData.length-1?{topLeft:4,topRight:4}:0,
-      borderSkipped:false,
-    }));
-    previewInst=new Chart(canvas.getContext('2d'),{
-      type:'bar',
-      data:{labels:lbls,datasets},
-      options:{
-        responsive:true,maintainAspectRatio:false,
-        layout:{padding:{top:36,bottom:10}},
-        plugins:{
-          legend:{display:true,position:'top',labels:{font:{family:'Malgun Gothic,sans-serif',size:11},padding:12,boxWidth:12}},
-          tooltip:{callbacks:{label:ctx=>' '+ctx.dataset.label+': '+formatVal(ctx.parsed.y,u)}},
-          datalabels:{anchor:'center',align:'center',color:'#fff',font:{size:9,weight:'bold'},formatter:(v,ctx)=>v>0?formatVal(v,u):null}
-        },
-        scales:{
-          x:{stacked:true,ticks:{font:{family:'Malgun Gothic,sans-serif',size:10}},grid:{display:false},border:{display:false}},
-          y:{stacked:true,ticks:{callback:v=>formatVal(v,u),font:{size:9}},grid:{color:'#eee'},border:{display:false}}
-        }
-      },
-      plugins:[
-        ...(typeof ChartDataLabels!=='undefined'?[ChartDataLabels]:[]),
-        {id:'pvTotals',afterDraw(chart){
-          const c2=chart.ctx,area=chart.chartArea;
-          lbls.forEach((_,i)=>{
-            if(!showTotal[i]) return;
-            const x=chart.getDatasetMeta(0).data[i].x;
-            let topY=area.bottom;
-            datasets.forEach((_,di)=>{const bar=chart.getDatasetMeta(di).data[i];if(seriesData[di][i]>0&&bar.y<topY)topY=bar.y;});
-            c2.save();c2.textAlign='center';c2.font='bold 10px Malgun Gothic,sans-serif';c2.fillStyle='#1e3560';
-            c2.fillText(formatVal(totals[i],u),x,topY-7);c2.restore();
-          });
-        }}
-      ]
-    });
-    return;
-  }
-
-  // ── 나비형 차트 분기 ──
-  if(cfg.chartType === 'butterfly'){
-    document.getElementById('preview-area').style.display='block';
-    buildButterflyChart(cfg, curStyle, 'preview-canvas');
-    return;
-  }
-
-  // ── 혼합 누적 막대 분기 ──
-  if(cfg.chartType === 'stackedMix'){
-    document.getElementById('preview-area').style.display='block';
-    const canvas=document.getElementById('preview-canvas');
-    if(previewInst){previewInst.destroy();previewInst=null;}
-    const u=cfg.unit||'raw';
-    const xIdx=cfg.xIdx??0;
-    const yIdxs=cfg.yIdxs||[cfg.yIdx];
-    const lbls=rawData.map(r=>String(r[xIdx]??''));
-    const seriesData=yIdxs.map(yi=>rawData.map(r=>parseFloat(r[yi])||0));
-    const seriesNames=yIdxs.map(yi=>headers[yi]||('계열'+(yi+1)));
-    const totals=lbls.map((_,i)=>seriesData.reduce((s,d)=>s+d[i],0));
-    const showTotal=lbls.map((_,i)=>seriesData.every(d=>d[i]>0));
-    const P=curPal;
-    const datasets=seriesData.map((data,si)=>({
-      label:seriesNames[si],data,backgroundColor:P[si%P.length],
-      stack:'s',borderWidth:0,
-      borderRadius:si===seriesData.length-1?{topLeft:4,topRight:4}:0,
-      borderSkipped:false,
-    }));
-    previewInst=new Chart(canvas.getContext('2d'),{
-      type:'bar',
-      data:{labels:lbls,datasets},
-      options:{
-        responsive:true,maintainAspectRatio:false,
-        layout:{padding:{top:36,bottom:10}},
-        plugins:{
-          legend:{display:true,position:'top',labels:{font:{family:'Malgun Gothic,sans-serif',size:11},padding:12,boxWidth:12}},
-          tooltip:{callbacks:{label:ctx=>' '+ctx.dataset.label+': '+formatVal(ctx.parsed.y,u)}},
-          datalabels:{anchor:'center',align:'center',color:'#fff',font:{size:9,weight:'bold'},formatter:(v,ctx)=>v>0?formatVal(v,u):null}
-        },
-        scales:{
-          x:{stacked:true,ticks:{font:{family:'Malgun Gothic,sans-serif',size:10}},grid:{display:false},border:{display:false}},
-          y:{stacked:true,ticks:{callback:v=>formatVal(v,u),font:{size:9}},grid:{color:'#eee'},border:{display:false}}
-        }
-      },
-      plugins:[
-        ...(typeof ChartDataLabels!=='undefined'?[ChartDataLabels]:[]),
-        {id:'pvTotals',afterDraw(chart){
-          const c2=chart.ctx,area=chart.chartArea;
-          lbls.forEach((_,i)=>{
-            if(!showTotal[i]) return;
-            const x=chart.getDatasetMeta(0).data[i].x;
-            let topY=area.bottom;
-            datasets.forEach((_,di)=>{const bar=chart.getDatasetMeta(di).data[i];if(seriesData[di][i]>0&&bar.y<topY)topY=bar.y;});
-            c2.save();c2.textAlign='center';c2.font='bold 10px Malgun Gothic,sans-serif';c2.fillStyle='#1e3560';
-            c2.fillText(formatVal(totals[i],u),x,topY-7);c2.restore();
-          });
-        }}
-      ]
-    });
+  // ── 누적 막대 분기 ──
+  if(cfg.chartType === 'stackedBar'){
+    const inner=document.getElementById('ppt-inner');
+    buildStackedBarChart(cfg, st, inner);
     return;
   }
 
@@ -3174,7 +3273,7 @@ function runExport(W,H,label){
       // ─────────────────────────────────────────────────────────
 
       // ── stackedMix/butterfly: chartInst 캔버스 직접 캡처 ──
-      if((cfg.chartType === 'stackedMix' || cfg.chartType === 'butterfly') && chartInst){
+      if((cfg.chartType === 'stackedBar' || cfg.chartType === 'stackedMix' || cfg.chartType === 'butterfly') && chartInst){
         const srcCanvas = chartInst.canvas;
         const os=document.createElement('canvas');
         os.width=W; os.height=H;
@@ -3720,7 +3819,7 @@ function renderToCanvas(W, H, cfg){
       // ─────────────────────────────────────────────────────────
 
       // ── stackedMix/butterfly: chartInst 캔버스 직접 캡처 ──
-      if((cfg.chartType === 'stackedMix' || cfg.chartType === 'butterfly') && chartInst){
+      if((cfg.chartType === 'stackedBar' || cfg.chartType === 'stackedMix' || cfg.chartType === 'butterfly') && chartInst){
         const srcCanvas = chartInst.canvas;
         const os=document.createElement('canvas');
         os.width=W; os.height=H;
