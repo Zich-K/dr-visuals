@@ -271,8 +271,10 @@ async function downloadUpdate(){
 window.addEventListener('DOMContentLoaded', () => {
   const vl=document.getElementById('sb-ver-label');
   const vd=document.getElementById('sb-ver-date');
+  const vb=document.getElementById('sb-version');
   if(vl) vl.textContent='v'+DR_VISUALS_VERSION;
   if(vd) vd.textContent=DR_VISUALS_UPDATED;
+  if(vb) vb.textContent='v'+DR_VISUALS_VERSION;
   setTimeout(checkForUpdate, 1500); // 페이지 로드 후 1.5초 뒤 체크
 });
 </script>
