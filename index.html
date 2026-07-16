@@ -228,7 +228,8 @@ body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:#f0
 // ════════════════════════════════════════
 // 버전 관리 & 업데이트 체크
 // ════════════════════════════════════════
-const DR_VISUALS_VERSION = '1.0.0';
+const DR_VISUALS_VERSION = '1.1.0';
+const DR_VISUALS_UPDATED = '2026-07-16';
 const VERSION_CHECK_URL  = 'https://raw.githubusercontent.com/Zich-K/dr-visuals/main/version.json';
 const DOWNLOAD_URL       = 'https://github.com/Zich-K/dr-visuals/raw/main/index.html';
 
@@ -268,6 +269,10 @@ async function downloadUpdate(){
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  const vl=document.getElementById('sb-ver-label');
+  const vd=document.getElementById('sb-ver-date');
+  if(vl) vl.textContent='v'+DR_VISUALS_VERSION;
+  if(vd) vd.textContent=DR_VISUALS_UPDATED;
   setTimeout(checkForUpdate, 1500); // 페이지 로드 후 1.5초 뒤 체크
 });
 </script>
@@ -322,6 +327,11 @@ window.addEventListener('DOMContentLoaded', () => {
     <div class="step-item" id="nav-rules" onclick="goToRules()">
       <div class="sn" style="background:rgba(232,184,75,.25);color:#e8b84b">⚙</div>
       <div><div class="st" style="color:#e8b84b">추천 규칙 관리</div><div class="sd">차트 추천 로직 수정</div></div>
+    </div>
+    <div style="padding:10px 10px 4px;margin-top:6px;border-top:1px solid rgba(255,255,255,.08);">
+      <div style="font-size:10px;color:rgba(255,255,255,.45);font-family:'Malgun Gothic',sans-serif;line-height:1.6;">
+        <span id="sb-ver-label">v1.1.0</span> · 업데이트 <span id="sb-ver-date">2026-07-16</span>
+      </div>
     </div>
   </div>
   <div class="sb-bottom">
@@ -979,7 +989,22 @@ function handleFile(file){
       window._multiHeaderMonths = [];
       const wb=XLSX.read(e.target.result,{type:'array'});
       const ws=wb.Sheets[wb.SheetNames[0]];
-      const raw=XLSX.utils.sheet_to_json(ws,{header:1});
+      let raw=XLSX.utils.sheet_to_json(ws,{header:1});
+
+      // ── ★ 데이터 시작점 정규화 (모든 감지 로직의 전제 조건) ─────────────
+      // 데이터가 A1이 아닌 위치(예: B3)에서 시작하거나 빈 열이 섞인 파일 처리:
+      // ① 빈 행 제거  ② 완전히 빈 열(선행·후행 포함) 전부 제거
+      const isEmptyCell = v => v===undefined || v===null || String(v).trim()==='';
+      raw = raw.filter(r => r && r.some(v => !isEmptyCell(v)));
+      if(raw.length){
+        const maxLen = Math.max(...raw.map(r => r.length));
+        const validCols = [];
+        for(let ci=0; ci<maxLen; ci++){
+          if(raw.some(r => !isEmptyCell(r[ci]))) validCols.push(ci);
+        }
+        raw = raw.map(r => validCols.map(ci => r[ci]));
+      }
+      // ────────────────────────────────────────────────────────────────────
       headers=raw[0].map(String);
       rawData=raw.slice(1).filter(r=>r.some(v=>v!==undefined&&v!==''));
 
@@ -1013,6 +1038,8 @@ function handleFile(file){
           if(/^\d{2,4}년\s*\d+월$/.test(trimmed)) return true;
           // "25.1Q 평균", "25.2Q 평균" 형태 (연도.분기Q 평균)
           if(/^\d{2,4}\.\d[Qq]\s*평균$/.test(trimmed)) return true;
+          // "25년 1Q 평균", "26년 2Q 평균" 형태 (연도년 분기Q 평균)
+          if(/^\d{2,4}년\s*\d[Qq]\s*평균?$/.test(trimmed)) return true;
           // "1Q평균", "2Q평균" 형태
           if(/^\d[Qq]\s*평균$/.test(trimmed)) return true;
           // "26년", "2026년" 형태 (연도만)
