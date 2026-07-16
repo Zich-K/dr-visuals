@@ -1005,8 +1005,18 @@ function handleFile(file){
           if(/^\d+$/.test(trimmed)) return true;
           // YYYY-MM, YYYY/MM 패턴
           if(/^\d{4}[-\/]\d{1,2}$/.test(trimmed)) return true;
-          // Q1, 1Q, 1분기, 1월 등
+          // Q1, 1Q, 1분기, 1월 등 단독
           if(/^[Qq]\d$|^\d[Qq]$|^\d+월$|^\d+분기$/.test(trimmed)) return true;
+          // "26년 1월", "25년 3월" 형태 (연도+월)
+          if(/^\d{2,4}년\s*\d+월$/.test(trimmed)) return true;
+          // "25.1Q 평균", "25.2Q 평균" 형태 (연도.분기Q 평균)
+          if(/^\d{2,4}\.\d[Qq]\s*평균$/.test(trimmed)) return true;
+          // "1Q평균", "2Q평균" 형태
+          if(/^\d[Qq]\s*평균$/.test(trimmed)) return true;
+          // "26년", "2026년" 형태 (연도만)
+          if(/^\d{2,4}년$/.test(trimmed)) return true;
+          // "상반기", "하반기", "1반기" 등
+          if(/^(상|하)\s*반기$|^\d+반기$/.test(trimmed)) return true;
           return false;
         }).length;
 
